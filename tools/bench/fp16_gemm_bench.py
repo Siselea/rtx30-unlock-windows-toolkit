@@ -24,8 +24,8 @@ Options:
     --json           print one JSON object instead of the human report
 
 Notes:
-    * 4096**3 with 50 iterations takes ~0.2 s on a 3060; larger sizes can trip the
-      Windows WDDM TDR timeout (~2 s of continuous GPU work), so keep it small.
+    * One GEMM at 4096**3 takes a few milliseconds on a 3060; the Windows WDDM TDR
+      timeout (~2 s) applies to a single kernel launch, so avoid very large sizes.
     * Expect roughly 24 TFLOPS locked and 38-45 TFLOPS unlocked on an RTX 3060
       12 GB (170 W power limit).
     * The PowerShell twin tools/bench/fp16_gemm_bench.ps1 makes the same call
@@ -139,8 +139,10 @@ def main():
 
 
 def run(dll_dir, cudart_path, cublas_path, size, iters, warmup):
+    _dll_dir_handle = None
     if hasattr(os, "add_dll_directory"):
-        os.add_dll_directory(dll_dir)
+        # keep the handle alive until the process exits; closing it removes the path
+        _dll_dir_handle = os.add_dll_directory(dll_dir)
     cudart = ctypes.WinDLL(cudart_path)
     cublas = ctypes.WinDLL(cublas_path)
 

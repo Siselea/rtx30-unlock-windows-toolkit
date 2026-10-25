@@ -77,6 +77,10 @@ $targetGuid = $EntryGuid
 $entry = $null
 if ($isAdmin) {
     $entry = Get-Rtx30BootEntry
+    if (-not $targetGuid -and $entry.multiple) {
+        $guids = ($entry.entries | ForEach-Object { $_.guid }) -join ', '
+        Fail-Rtx30 ('multiple "RTX30 UNLOCK" boot entries found: ' + $guids + ' - pass -EntryGuid to remove one explicitly.')
+    }
     if (-not $targetGuid -and $entry.found) { $targetGuid = $entry.guid }
 }
 
@@ -112,19 +116,23 @@ if ($DryRun) {
 
 if (-not $isAdmin) { Fail-Rtx30 'run this script from an elevated PowerShell (Administrator). -DryRun works without elevation.' }
 
-# Refuse obviously wrong targets.
-if ($targetGuid -and -not $entry.found) {
-    # An explicit GUID that is not one of ours: only allow it if the caller really means it.
+# Validate the target: never delete an arbitrary entry.
+if ($targetGuid) {
+    if ($targetGuid -notmatch '^\{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\}$') {
+        Fail-Rtx30 ('-EntryGuid is not a GUID: ' + $targetGuid)
+    }
     $all = & bcdedit /enum all 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0) { Fail-Rtx30 'bcdedit /enum all failed.' }
+    $targetBlock = $null
     foreach ($block in ($all -split '(?:\r?\n){2,}')) {
-        if ($block -notmatch [regex]::Escape($targetGuid)) { continue }
-        if ($block -match 'bootmgfw\.efi' -or $block -match '\{bootmgr\}') {
-            Fail-Rtx30 ('refusing to delete ' + $targetGuid + ' because it looks like the Windows Boot Manager entry.')
-        }
-        if ($block -notmatch 'RTX30 UNLOCK') {
-            Fail-Rtx30 ('refusing to delete ' + $targetGuid + ': its description does not contain "RTX30 UNLOCK".')
-        }
-        break
+        if ($block -match [regex]::Escape($targetGuid)) { $targetBlock = $block; break }
+    }
+    if (-not $targetBlock) { Fail-Rtx30 ('boot entry not found: ' + $targetGuid) }
+    if ($targetBlock -match 'bootmgfw\.efi' -or $targetBlock -match '\{bootmgr\}') {
+        Fail-Rtx30 ('refusing to delete ' + $targetGuid + ' because it looks like the Windows Boot Manager entry.')
+    }
+    if ($targetBlock -notmatch 'RTX30 UNLOCK') {
+        Fail-Rtx30 ('refusing to delete ' + $targetGuid + ': its description does not contain "RTX30 UNLOCK".')
     }
 }
 if (-not $targetGuid -and -not ($DeletePartition -and $volume)) {
@@ -144,11 +152,11 @@ if ($targetGuid) {
     if (-not (Remove-Rtx30BootEntry $targetGuid)) {
         Fail-Rtx30 ('bcdedit /delete ' + $targetGuid + ' failed.')
     }
-    $verify = Get-Rtx30BootEntry
-    if ($verify.found -and $verify.guid -eq $targetGuid) {
-        Fail-Rtx30 'the boot entry still exists after bcdedit /delete.'
+    $fw = & bcdedit /enum '{fwbootmgr}' 2>&1 | Out-String
+    if ($fw -match [regex]::Escape($targetGuid)) {
+        Fail-Rtx30 'the boot entry is still referenced by {fwbootmgr} after bcdedit /delete.'
     }
-    Write-Rtx30Info 'boot entry deleted and verified'
+    Write-Rtx30Info 'boot entry deleted and removed from the firmware display order'
 }
 
 if ($DeletePartition) {
@@ -159,6 +167,10 @@ if ($DeletePartition) {
     if (-not $partition) { Fail-Rtx30 'cannot map the volume to a partition.' }
     $fresh = Get-Partition -DiskNumber $partition.DiskNumber -PartitionNumber $partition.PartitionNumber -ErrorAction Stop
     if ($fresh.IsBoot) { Fail-Rtx30 'the partition is marked as the boot partition; refusing to delete it.' }
+    if ($fresh.GptType -ne $script:Rtx30EspTypeGuid) {
+        Fail-Rtx30 ('partition type is ' + $fresh.GptType + ', not an EFI System Partition; refusing to delete it.')
+    }
+    if ($fresh.Size -lt 64MB) { Fail-Rtx30 'partition is smaller than 64 MB; refusing to delete it.' }
 
     Write-Rtx30Step ('deleting disk {0} partition {1} ({2:N0} MB, label {3})' -f $partition.DiskNumber, $partition.PartitionNumber, ($fresh.Size / 1MB), $VolumeLabel)
     Remove-Partition -DiskNumber $partition.DiskNumber -PartitionNumber $partition.PartitionNumber -Confirm:$false -ErrorAction Stop

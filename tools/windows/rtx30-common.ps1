@@ -147,6 +147,8 @@ function Get-Rtx30BootEntry([string]$Description = 'RTX30 UNLOCK') {
         device  = $null
         path    = $null
         first   = $null
+        multiple = $false
+        entries  = @()
         raw_all = $null
         raw_fw  = $null
     }
@@ -154,17 +156,26 @@ function Get-Rtx30BootEntry([string]$Description = 'RTX30 UNLOCK') {
     if ($LASTEXITCODE -ne 0) { Fail-Rtx30 'bcdedit /enum all failed (elevated PowerShell required)' }
     $result.raw_all = $all
     $guidPattern = '\{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\}'
+    $found = @()
     foreach ($block in ($all -split '(?:\r?\n){2,}')) {
         if ($block -notmatch [regex]::Escape($Description)) { continue }
         $g = [regex]::Match($block, $guidPattern)
         if (-not $g.Success) { continue }
-        $result.found = $true
-        $result.guid = $g.Value
         $dev = [regex]::Match($block, 'partition=([^\s]+)')
-        if ($dev.Success) { $result.device = $dev.Groups[1].Value }
         $path = [regex]::Match($block, '(\\EFI\\[^\s]+)')
-        if ($path.Success) { $result.path = $path.Groups[1].Value }
-        break
+        $found += [pscustomobject]@{
+            guid   = $g.Value
+            device = if ($dev.Success) { $dev.Groups[1].Value } else { $null }
+            path   = if ($path.Success) { $path.Groups[1].Value } else { $null }
+        }
+    }
+    if ($found.Count -gt 0) {
+        $result.found = $true
+        $result.guid = $found[0].guid
+        $result.device = $found[0].device
+        $result.path = $found[0].path
+        $result.entries = $found
+        $result.multiple = ($found.Count -gt 1)
     }
     $fw = & bcdedit /enum '{fwbootmgr}' 2>&1 | Out-String
     if ($LASTEXITCODE -eq 0) {

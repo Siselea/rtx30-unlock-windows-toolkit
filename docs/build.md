@@ -66,6 +66,9 @@ $env:CPATH    = "<repo>\tools\win32\headers"
 4. Then run the builder:
 
 ```powershell
+# optional: check the toolchain, pinned commit and patch applicability without building
+.\scripts\build-from-upstream.ps1 -VerifyOnly
+
 .\scripts\build-from-upstream.ps1
 ```
 

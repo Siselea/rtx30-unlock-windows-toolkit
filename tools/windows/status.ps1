@@ -138,6 +138,7 @@ function Get-InstallState {
         size_mb           = $null
         boot_entry_found  = $null   # $null = unknown (needs admin)
         boot_entry_guid   = $null
+        boot_entry_multiple = $null
         boot_entry_first  = $null
         boot_entry_device = $null
         boot_entry_path   = $null
@@ -174,19 +175,29 @@ function Get-InstallState {
         return [pscustomobject]$state
     }
     $guidPattern = '\{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\}'
+    $foundEntries = @()
     foreach ($block in ($all -split '(?:\r?\n){2,}')) {
         if ($block -notmatch 'RTX30 UNLOCK') { continue }
         $g = [regex]::Match($block, $guidPattern)
         if (-not $g.Success) { continue }
-        $state.boot_entry_found = $true
-        $state.boot_entry_guid = $g.Value
         $dev = [regex]::Match($block, 'partition=([^\s]+)')
-        if ($dev.Success) { $state.boot_entry_device = $dev.Groups[1].Value }
         $path = [regex]::Match($block, '(\\EFI\\[^\s]+)')
-        if ($path.Success) { $state.boot_entry_path = $path.Groups[1].Value }
-        break
+        $foundEntries += [pscustomobject]@{
+            guid   = $g.Value
+            device = if ($dev.Success) { $dev.Groups[1].Value } else { $null }
+            path   = if ($path.Success) { $path.Groups[1].Value } else { $null }
+        }
     }
-    if (-not $state.boot_entry_found) { $state.boot_entry_found = $false }
+    if ($foundEntries.Count -gt 0) {
+        $state.boot_entry_found = $true
+        $state.boot_entry_guid = $foundEntries[0].guid
+        $state.boot_entry_device = $foundEntries[0].device
+        $state.boot_entry_path = $foundEntries[0].path
+        $state.boot_entry_multiple = ($foundEntries.Count -gt 1)
+        if ($foundEntries.Count -gt 1) {
+            Add-Warning ('multiple "RTX30 UNLOCK" boot entries exist: ' + (($foundEntries | ForEach-Object { $_.guid }) -join ', '))
+        }
+    } else { $state.boot_entry_found = $false }
 
     $fw = & bcdedit /enum '{fwbootmgr}' 2>&1 | Out-String
     if ($LASTEXITCODE -eq 0 -and $state.boot_entry_guid) {

@@ -11,6 +11,7 @@ elevation (everything else needs an elevated shell).
 | `install-internal.ps1` | verify package → (create or update) hidden ESP-type FAT32 partition → copy + verify → `RTX30 UNLOCK` boot entry first → hide. Idempotent: an existing `RTX30UNLOCK` volume is updated in place, no second partition | yes |
 | `remove-internal.ps1` | delete the boot entry (auto-detected) and optionally the partition; `-ExtendSystem` grows `C:` back over the freed space | yes |
 | `rtx30-common.ps1` | shared helpers (volumes, BCD parsing, SHA256SUMS verification, Secure Boot, logging) - dot-sourced by the scripts above, not meant to be run directly | - |
+| `disable-fast-startup.ps1` | turn Windows Fast Startup off (or back on with `-Enable`), so "shut down" is a real cold boot and re-runs the unlocker; `-DryRun` works unelevated | yes |
 
 `install-internal.ps1` parameters:
 

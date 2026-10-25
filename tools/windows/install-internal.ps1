@@ -307,6 +307,9 @@ try {
 
     # --- boot entry ---------------------------------------------------------
     $entry = Get-Rtx30BootEntry
+    if ($entry.multiple) {
+        Fail-Rtx30 ('multiple "RTX30 UNLOCK" boot entries exist ({0}); clean them up first: tools\windows\remove-internal.ps1 -EntryGuid <guid>' -f (($entry.entries | ForEach-Object { $_.guid }) -join ', '))
+    }
     if ($entry.found) {
         $guid = $entry.guid
         $state.reusedEntry = $true

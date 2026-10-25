@@ -88,9 +88,13 @@ Windows 默认开启快速启动（`HiberbootEnabled=1`）。此时"关机"= 注
 # 查看（不需要提权）
 reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Power" /v HiberbootEnabled
 
-# 关闭（提权）
+# 关闭（提权）——也可以用辅助脚本
+tools\windows\disable-fast-startup.ps1 -DryRun
 reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Power" /v HiberbootEnabled /t REG_DWORD /d 0 /f
 ```
+
+`tools\windows\disable-fast-startup.ps1`（提权）做同样的修改，`-Enable` 可恢复
+Windows 默认值。
 
 不想改设置时，真正的冷启动是 **开始 → 电源 → 重启**，或 `shutdown /s /full /t 0`。
 

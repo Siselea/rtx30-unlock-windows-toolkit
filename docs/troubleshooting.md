@@ -98,9 +98,13 @@ back in the locked state, which looks like "shutdown and power-on did not help".
 # check (no elevation needed)
 reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Power" /v HiberbootEnabled
 
-# disable (elevated)
+# disable (elevated) - or use the helper script
+tools\windows\disable-fast-startup.ps1 -DryRun
 reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Power" /v HiberbootEnabled /t REG_DWORD /d 0 /f
 ```
+
+`tools\windows\disable-fast-startup.ps1` (elevated) does the same registry change
+and supports `-Enable` to restore the Windows default.
 
 Without changing the setting, a true cold boot is **Start -> Power -> Restart**,
 or `shutdown /s /full /t 0`.
