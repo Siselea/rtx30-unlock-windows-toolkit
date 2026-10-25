@@ -1,0 +1,8 @@
+# Normalise text files in the repository to LF; Windows-only scripts get CRLF on
+# checkout. The patch file must keep its exact bytes so `git apply` works everywhere.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+patches/*.patch -text
+LICENSE -text
