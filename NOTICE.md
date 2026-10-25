@@ -54,9 +54,23 @@ across the derivative patch and the surrounding tooling):
 * `patches/README.md`
 * `scripts/**`
 * `tools/**`
-* `.gitignore`
+* `.gitattributes`, `.gitignore`
 
 Copyright (C) 2026 Siselea and contributors.
+
+## Redistribution
+
+* **Source:** this repository plus the pinned upstream commit and the patch are
+  everything needed to rebuild `BOOTX64.EFI`. Distributing a built binary implies the
+  GPL-2.0-only obligation to make the corresponding source available.
+* **Do not redistribute `RTX-UNLOCK\ASSETS\`** (NVIDIA GPU firmware, under NVIDIA's
+  own terms, fetched by the upstream tooling - not covered by this repository's
+  license).
+* **Do not redistribute `PROFILE.BIN` or `RUNnn`/probe logs.** The profile is bound to
+  a specific card/board (PCI ID, subsystem, chip) and the logs contain machine
+  identifiers; share them only when reporting an issue, ideally trimmed.
+* The scripts and docs in this repository may be redistributed under GPL-2.0-only with
+  attribution to the upstream projects listed above.
 
 ## Trademarks
 

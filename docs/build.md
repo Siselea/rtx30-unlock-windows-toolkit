@@ -9,7 +9,7 @@ measurements in [`test-report.md`](test-report.md).
 | tool | notes |
 |---|---|
 | [Bun](https://bun.sh) 1.4+ | upstream build scripts are Bun scripts |
-| LLVM `clang` + `lld-link` 17+ | also used for `clang-format` in `bun run format`, optional |
+| LLVM `clang` + `lld-link` 17+ | building; `bun run format` additionally needs `clang-format` **19+** (optional) |
 | Python 3.9+ | only for upstream's optional profile/packaging helpers and `bun run test` |
 | EDK2 `MdePkg` headers | already vendored in the upstream repository |
 
@@ -38,8 +38,10 @@ toolchain\llvm-shim\
 ```
 
    lld dispatches on `argv[0]`, so a copy of `ld.lld.exe` named `lld-link.exe` behaves
-   exactly like `lld-link`. Keep `<ndk>\bin` on `PATH` as well: `clang.exe` needs the
-   NDK DLLs (`libwinpthread.dll`, …).
+   exactly like `lld-link`. `clang.exe` needs the NDK DLLs (`libwinpthread.dll`, …).
+   Note that upstream's `tools/build.ts` **replaces** the child `PATH` with `LLVM_BIN`
+   (it does not append), so copies of those DLLs must live next to `clang.exe` in the
+   shim directory (or in a directory included in `LLVM_BIN` itself).
 
 2. clang's built-in headers live relative to the executable; either copy
    `<ndk>\lib\clang\<ver>\include` into
@@ -51,9 +53,11 @@ toolchain\llvm-shim\
    point `CPATH` at that directory:
 
 ```powershell
-$env:PATH     = "<bun>\bin;<ndk>\bin;" + $env:PATH
+$env:PATH     = "<bun>\bin;<repo>\toolchain\llvm-shim;" + $env:PATH
 $env:LLVM_BIN = "<repo>\toolchain\llvm-shim"
 $env:CPATH    = "<repo>\tools\win32\headers"
+# build-from-upstream.ps1 finds clang/lld-link via PATH (LLVM_BIN is only read by
+# upstream's build.ts), so the shim directory has to be on PATH as well.
 ```
 
    The implementations (`memcpy`, `memset`, …) are in the upstream sources
@@ -71,10 +75,15 @@ $env:CPATH    = "<repo>\tools\win32\headers"
    [`../SOURCES.md`](../SOURCES.md)),
 2. applies [`../patches/0001-gop-single-display-child.patch`](../patches/0001-gop-single-display-child.patch),
 3. runs `bun install`, `bun run build` → `build/efi/BOOTX64.EFI`,
-4. runs `bun run firmware:assets` → the five firmware assets
+4. runs `bun run firmware:assets` → 5 firmware payloads + `NVIDIA-LICENSE`
    (downloads NVIDIA/CachyOS pinned inputs, needs network),
 5. assembles `build-workspace/package/` for
-   [`../tools/windows/install-internal.ps1`](../tools/windows/install-internal.ps1).
+   [`../tools/windows/install-internal.ps1`](../tools/windows/install-internal.ps1),
+   writes `SHA256SUMS.txt`, `RTX-UNLOCK/README-PROFILE.txt` and an (optional) `DEBUG.ON`.
+
+> Re-running the builder deletes `build-workspace/package/` first, including a
+> `PROFILE.BIN` you already copied there. Copy it somewhere safe or re-add it after
+> a rebuild.
 
 ## Reproducibility note
 

@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Fetch the pinned upstream source, apply the single-display patch, build the EFI
     application, generate the firmware assets and assemble an installable package.
@@ -48,6 +48,8 @@ $UpstreamCommit = '5c076dc4ee7fa369639669fa591ac74d8f6dfcd8'
 $ReferenceUrl   = 'https://github.com/Zagitta/gpu-unlock.git'
 $ReferenceCommit = '0ebdb1c6308b6a2072be5bf04513472942541956'
 $PatchPath      = Join-Path $repoRoot 'patches\0001-gop-single-display-child.patch'
+# The patch is part of this repository; this hash detects local edits/corruption.
+$PatchSha256    = 'cdc22b6d8c989a4eb08f14e8eadbf5cc2eebedc3461a938db275362e54eeb35f'
 
 function Fail([string]$m) { Write-Host "ERROR: $m" -ForegroundColor Red; exit 1 }
 function Step([string]$m) { Write-Host "==> $m" -ForegroundColor Cyan }
@@ -63,6 +65,11 @@ foreach ($tool in @('git', 'bun', 'clang', 'lld-link')) {
     Info ("{0}: {1}" -f $tool, (Get-Command $tool).Source)
 }
 if (-not (Test-Path $PatchPath)) { Fail "patch not found: $PatchPath" }
+$patchHash = (Get-FileHash $PatchPath -Algorithm SHA256).Hash.ToLower()
+if ($patchHash -ne $PatchSha256) {
+    Fail ("patch sha256 is $patchHash, expected $PatchSha256 - the patch file was modified or corrupted.")
+}
+Info "patch sha256: $patchHash"
 
 # --- clone upstream ----------------------------------------------------------
 $src = Join-Path $WorkDir 'rtx30-unlock'
@@ -143,18 +150,39 @@ New-Item -ItemType File -Force -Path (Join-Path $pkg 'RTX-UNLOCK\DEBUG.ON') | Ou
     '  4. Full shutdown, power on: the unlocker runs first, then Windows.',
     '  5. Optionally delete DEBUG.ON for fully automatic boots.',
     '',
-    'Verification: tools\bench\fp16_gemm_bench.py (locked ~24 TFLOPS vs unlocked ~38-45',
-    'on an RTX 3060 12 GB, 4096^3, FP16 in / FP32 accumulate).'
+    'Verification: tools\windows\status.ps1 runs the cuBLAS check and explains the result.',
+    'Locked ~24 TFLOPS vs unlocked ~38-45 TFLOPS on an RTX 3060 12 GB',
+    '(4096^3, FP16 in / FP32 accumulate). The check also works without Python.',
+    '',
+    'This package folder contains SHA256SUMS.txt; install-internal.ps1 verifies it',
+    'before and after copying. PROFILE.BIN must be captured on THIS machine.'
 ) | Set-Content -Path (Join-Path $pkg 'RTX-UNLOCK\README-PROFILE.txt') -Encoding utf8
 
 $efiHash = (Get-FileHash (Join-Path $pkg 'EFI\BOOT\BOOTX64.EFI') -Algorithm SHA256).Hash.ToLower()
+
+# Integrity manifest so install-internal.ps1 can verify the package and the copy.
+$sumsPath = Join-Path $pkg 'SHA256SUMS.txt'
+$sumLines = @()
+foreach ($file in (Get-ChildItem $pkg -Recurse -File | Sort-Object FullName)) {
+    if ($file.FullName -eq $sumsPath) { continue }
+    $hash = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLower()
+    $relative = $file.FullName.Substring($pkg.Length + 1).Replace('\', '/')
+    $sumLines += ('{0}  {1}' -f $hash, $relative)
+}
+[System.IO.File]::WriteAllLines($sumsPath, $sumLines, (New-Object System.Text.UTF8Encoding($false)))
+
 Step 'done'
 Write-Host ''
 Write-Host ("  package      : " + $pkg)
 Write-Host ("  EFI sha256   : " + $efiHash)
 Write-Host ("  assets       : " + ((Get-ChildItem (Join-Path $pkg 'RTX-UNLOCK\ASSETS') -File).Count) + ' files')
+Write-Host ("  manifest     : " + $sumsPath + ' (' + $sumLines.Count + ' files)')
 Write-Host ''
-Write-Host 'Next: put PROFILE.BIN into RTX-UNLOCK, then run tools\windows\install-internal.ps1'
+Write-Host 'Next steps:'
+Write-Host '  1. Put the PROFILE.BIN captured on this machine into RTX-UNLOCK\ (README-PROFILE.txt).'
+Write-Host '  2. Elevated: tools\windows\install-internal.ps1 -PackageDir <package> -DryRun'
+Write-Host '     then:     tools\windows\install-internal.ps1 -PackageDir <package>'
+Write-Host '  3. Reboot, then: tools\windows\status.ps1    (expect "UNLOCKED")'
 Write-Host ''
 
 

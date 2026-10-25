@@ -19,8 +19,9 @@ CANCELLED_OR_REFUSED stage=full-prepare status=0x8000000000000003 touched=0
 ## 补丁内容（`src/gop/full.c`，27 增 / 12 删）
 
 1. `Children()` 接受 1 个子设备（`*b` 保持 `NULL`）；
-2. `GfPrepare()` 在无 sibling 时跳过副输出 EDID 驱动（role 5）的校验，日志打印
-   `FULL_TOPOLOGY children=1 sibling=0`；
+2. `GfPrepare()` 在无 sibling 时把 role 5 指向 role 4，而不是启动副输出 EDID 驱动；
+   其余 role 校验照旧执行（六个 role 全部验证），日志打印
+   `FULL_TOPOLOGY children=1 sibling=0` / `FULL_READY: 1 vendor children; six roles verified`；
 3. `GfRun()` / `Detached()` 条件化跳过 sibling 的 stop/start，PCI 驱动 `Stop()`
    的子设备数按 1 传入；
 4. 解锁后的恢复路径同样在无 sibling 时跳过 `Start(role 5)`，并对单子设备重新探测做判空。
@@ -51,12 +52,15 @@ cuBLAS `FP16 输入 / FP32 累加` 4096³ GEMM（`tools/bench/fp16_gemm_bench.py
 
 | 指标 | 解锁前 | 解锁后 | 提升 |
 |---|---:|---:|---:|
-| FP16→FP32 累加 GEMM | 24.00 TFLOPS | 37.96–44.33 TFLOPS | +58…+85 % |
-| TF32 GEMM | 24.06 TFLOPS | 33.70–45.72 TFLOPS | +40…+90 % |
+| FP16→FP32 累加 GEMM | 21.4–24.1 TFLOPS | 37.96–44.33 TFLOPS | +58…+85 % |
+
+> 早期版本的 TF32 行（24.06 → 33.70–45.72）已删除：当前基准不测这条路径，
+> 且上界超过该卡 TF32 理论峰值。见 [`test-report.md`](test-report.md)。
 
 ## 注意
 
 - 上游只验证过双输出拓扑；单输出路径是我们在一张卡上的实测，请视为实验性功能。
 - 安全行为不变：按 `U`/自动开始之前的所有检查都是"拒绝而不是写硬件"；清理不确定时
   仍会停在 `STOP ... POWER OFF`。
-- 解锁后画面靠 GOP 恢复；若黑屏，物理断电并查看 `RTX-UNLOCK/RUNnn/GOP.TXT`。
+- 解锁后画面靠 GOP 恢复；若黑屏，物理断电并查看 `RTX-UNLOCK/RUNnn/GOP.TXT`
+  （隐藏分区需要提权用 mountvol 挂载，见 [`troubleshooting.md`](troubleshooting.md) 第 8 节）。

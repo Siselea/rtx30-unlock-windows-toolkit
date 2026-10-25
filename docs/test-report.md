@@ -13,10 +13,11 @@ No identifiers beyond the hardware model are included.
 | OS | Windows 11 build 26300, UEFI, **Secure Boot disabled** |
 | Driver | NVIDIA 616.56 (KMD 616.56, CUDA UMD 13.4) |
 | Upstream | craftingmod/rtx30-unlock `5c076dc` + `patches/0001-gop-single-display-child.patch` |
-| Assets | `bun run firmware:assets` (pinned 610.43.03 generation), all 5 SHA-256 verified |
+| Assets | `bun run firmware:assets` (pinned 610.43.03 generation): 5 payloads + `NVIDIA-LICENSE` (6 files), fetched and SHA-256 verified by the upstream tool |
 
 The card is a GA104 die built as an RTX 3060 12 GB SKU (not GA106). `PMC_BOOT_0`
-reported `0xb74000a1` (= GA104) and the profile bound the card to that chip.
+reported `0xb74000a1` (parsed as GA104; field mapping follows the upstream
+`docs/agent/GA10X-EXPERIMENTAL.md`) and the profile bound the card to that chip.
 
 ## UEFI transaction (single display, no second EDID source)
 
@@ -56,11 +57,18 @@ all five assets verified.
 
 Same machine, same command, cold boot vs unlocked boot. `tools/bench/fp16_gemm_bench.py`
 runs cuBLAS `cublasGemmEx` with FP16 inputs, FP32 accumulate, 4096³, 50 iterations.
+The PowerShell twin `tools/bench/fp16_gemm_bench.ps1` (no Python needed) makes the same
+call; both scripts print a verdict (locked `<= 28`, unlocked `>= 34` TFLOPS).
 
 | measurement | locked | unlocked | gain |
 |---|---:|---:|---:|
-| FP16 in / FP32 accumulate GEMM | 24.00 TFLOPS | 37.96 – 44.33 TFLOPS | +58 … +85 % |
-| TF32 GEMM | 24.06 TFLOPS | 33.70 – 45.72 TFLOPS | +40 … +90 % |
+| FP16 in / FP32 accumulate GEMM | 21.4 – 24.1 TFLOPS (24.00 in this run) | 37.96 – 44.33 TFLOPS | +58 … +85 % |
+
+> The locked baseline drifts with temperature and background load (21.37 / 22.93 /
+> 24.00 / 24.06 were all observed). An earlier revision also listed a **TF32** row
+> (24.06 → 33.70–45.72 TFLOPS); it is not reproducible with the current tooling
+> (the benchmarks measure only the FP16/FP32-accumulate path) and its upper bound
+> is above this card's expected TF32 peak, so it was removed - do not use it.
 
 llama.cpp (gemma-4-12b Q4_K_M, `llama-bench -p 512 -n 128 -ngl 99 -r 3`):
 
@@ -71,7 +79,9 @@ llama.cpp (gemma-4-12b Q4_K_M, `llama-bench -p 512 -n 128 -ngl 99 -r 3`):
 
 **Interpretation.** The unlock doubles the issue rate of FP16/BF16 FMA into FP32
 accumulate operations (Tensor Core path). On this 170 W card the measured GEMM gain is
-+58…+85 %, consistent with the upstream RTX 3080 report (60.9 → 109 TFLOPS). Quantized
++58…+85 %, in line with the upstream README, which reports card-dependent numbers
+(e.g. RTX 3090 Ti: FP16 87.46 → 118.39, BF16 87.50 → 157.41, TF32 42.58 → 82.61
+TFLOPS). The direction matches; the absolute numbers differ per card. Quantized
 llama.cpp inference (Q4_K) uses FP16-accumulate MMQ kernels and is *not* affected by
 the limiter, so it is a bad unlock indicator; use the cuBLAS FP16/FP32 benchmark.
 
@@ -90,7 +100,9 @@ Windows started; the FP16→FP32-accumulate GEMM measured 41.67 TFLOPS after tha
 * The single-output path is an experimental extension validated on one card; the
   two-output topology continues to work unchanged.
 * No VBIOS or firmware file is written; selectors reset on power loss and are re-set
-  on every cold boot. Suspend/hibernate may reset them.
+  on every cold boot. Suspend/hibernate reset them too: reproduced on this machine on
+  2026-10-25 (cold boot 21:48 → sleep 22:17 → resume 22:18 → 22:25 only 22.93 TFLOPS,
+  22:56 21.37, installation untouched). See [`troubleshooting.md`](troubleshooting.md).
 * Long-running single GEMM kernels (>~2 s of continuous GPU work) can hit the WDDM TDR
   timeout; normal inference/training workloads do not. The benchmark is sized to avoid it.
 * The exact board profile (`PROFILE.BIN`) and raw run logs are machine-bound and are not

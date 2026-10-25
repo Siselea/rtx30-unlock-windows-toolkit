@@ -18,7 +18,19 @@ git am /path/to/0001-gop-single-display-child.patch
 bun install && bun run build
 ```
 
-`scripts/build-from-upstream.ps1` does this automatically.
+Windows (PowerShell):
+
+```powershell
+git clone https://github.com/craftingmod/rtx30-unlock
+Set-Location rtx30-unlock
+git checkout 5c076dc4ee7fa369639669fa591ac74d8f6dfcd8
+git am ..\patches\0001-gop-single-display-child.patch
+bun install; bun run build
+```
+
+`scripts/build-from-upstream.ps1` does this automatically. The patch is already
+applied in a reused `build-workspace\rtx30-unlock` checkout; the script detects that
+and skips `git apply`, but do not expect to apply the patch twice by hand.
 
 ## License
 

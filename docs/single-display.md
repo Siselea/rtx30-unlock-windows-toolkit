@@ -30,9 +30,10 @@ single-display machine.
 `src/gop/full.c` (27 insertions, 12 deletions):
 
 1. `Children()` accepts one child; `*b` stays `NULL`.
-2. `GfPrepare()` treats `sibling == NULL` as "single output": skips the sibling EDID
-   driver (role 5), keeps the remaining role checks, and logs
-   `FULL_TOPOLOGY children=1 sibling=0`.
+2. `GfPrepare()` treats `sibling == NULL` as "single output": role 5 is pointed at
+   role 4 instead of starting the sibling EDID driver, the remaining role checks still
+   run (all six roles are verified), and it logs
+   `FULL_TOPOLOGY children=1 sibling=0` / `FULL_READY: 1 vendor children; six roles verified`.
 3. `GfRun()` / `Detached()` conditionally skip the sibling stop/start steps and pass
    `1` instead of `2` children to the PCI driver `Stop()`.
 4. The post-transaction restore path skips `Start(role 5)` when there is no sibling and
@@ -68,8 +69,11 @@ Measured with cuBLAS `FP16 in / FP32 accumulate` 4096³ GEMM on the same machine
 
 | | before (locked) | after (unlocked) | gain |
 |---|---:|---:|---:|
-| FP16→FP32 accumulate GEMM | 24.00 TFLOPS | 37.96–44.33 TFLOPS | +58…+85 % |
-| TF32 GEMM | 24.06 TFLOPS | 33.70–45.72 TFLOPS | +40…+90 % |
+| FP16→FP32 accumulate GEMM | 21.4–24.1 TFLOPS | 37.96–44.33 TFLOPS | +58…+85 % |
+
+> TF32 numbers from an earlier revision (24.06 → 33.70–45.72) were removed: the
+> current benchmarks do not measure that path and the upper bound exceeded this
+> card's expected TF32 peak. See [`test-report.md`](test-report.md).
 
 ## Caveats
 
@@ -80,4 +84,6 @@ Measured with cuBLAS `FP16 in / FP32 accumulate` 4096³ GEMM on the same machine
   refuses instead of writing to the GPU, and an uncertain cleanup halts with
   `STOP ... POWER OFF`.
 * Display recovery after the FLR still goes through the GOP restore path; if the screen
-  does not come back, power off physically and inspect `RTX-UNLOCK/RUNnn/GOP.TXT`.
+  does not come back, power off physically and inspect `RTX-UNLOCK/RUNnn/GOP.TXT`
+  (mount the hidden partition from an elevated shell - see
+  [`troubleshooting.md`](troubleshooting.md) section 8).

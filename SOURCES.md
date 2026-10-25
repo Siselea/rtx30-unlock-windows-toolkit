@@ -41,7 +41,8 @@ The script:
 2. clones `craftingmod/rtx30-unlock` at the pinned commit and verifies the commit hash,
 3. applies `patches/0001-gop-single-display-child.patch`,
 4. runs `bun install`, `bun run build` and `bun run firmware:assets`,
-5. assembles `build-workspace/package/` (`EFI/BOOT/BOOTX64.EFI` + `RTX-UNLOCK/ASSETS/`),
+5. assembles `build-workspace/package/` (`EFI/BOOT/BOOTX64.EFI`, `RTX-UNLOCK/ASSETS/`,
+   `SHA256SUMS.txt`, `README-PROFILE.txt` and an optional `DEBUG.ON`),
 6. optionally clones `Zagitta/gpu-unlock` at the pinned commit for reference.
 
 Everything else in this repository — installation scripts, benchmark, build
