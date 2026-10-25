@@ -1,0 +1,5 @@
+build-workspace/
+__pycache__/
+*.pyc
+*.log
+*.bcd
